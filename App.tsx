@@ -19,6 +19,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (roomId && user) {
       const unsubscribe = db.getRoom(roomId, (data) => {
+        if (!data) {
+          // Room was deleted
+          setRoom(null);
+          setRoomId('');
+          return;
+        }
         setRoom(data);
       });
       return () => unsubscribe();
@@ -48,7 +54,7 @@ const App: React.FC = () => {
     const newRoom: GameRoom = {
       id: rid,
       hostId: uid,
-      themes: [],
+      themes: ['', '', ''],
       phase: GamePhase.LOBBY,
       players: {
         [uid]: {
@@ -85,6 +91,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLeaveRoom = async () => {
+    if (!room || !user) return;
+    try {
+      await db.leaveRoom(room.id, user.id, user.id === room.hostId);
+      setRoom(null);
+      setRoomId('');
+    } catch (err: any) {
+      setError(err.message || "Failed to leave room");
+    }
+  };
+
   const updatePhase = async (nextPhase: GamePhase) => {
     if (room) {
       await db.updateRoom(room.id, { phase: nextPhase });
@@ -105,7 +122,7 @@ const App: React.FC = () => {
 
     await db.updateRoom(room.id, {
       phase: GamePhase.SELECT_THEMES,
-      themes: [],
+      themes: ['', '', ''],
       players: resetPlayers
     });
   };
@@ -205,126 +222,141 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 pb-20 font-sans">
       <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-md">
-        <div className="truncate max-w-[50%]">
+        <div className="truncate max-w-[40%]">
           <h2 className="text-xl font-bold text-indigo-400">JINX O</h2>
           <p className="text-xs text-slate-500">Room: <span className="font-mono font-bold text-slate-400">{room.id}</span></p>
         </div>
-        <div className="flex items-center gap-4 max-w-[50%]">
-          <div className="text-right truncate">
+        <div className="flex items-center gap-4 max-w-[60%]">
+          <div className="text-right truncate hidden sm:block">
             <p className="text-sm font-semibold truncate text-slate-200" title={user.name}>{user.name}</p>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full ${room.players[user.id]?.isHost ? 'bg-amber-900/40 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
-              {room.players[user.id]?.isHost ? 'Host' : 'Player'}
+            <span className={`text-[10px] px-2 py-0.5 rounded-full ${room.players?.[user.id]?.isHost ? 'bg-amber-900/40 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
+              {room.players?.[user.id]?.isHost ? 'Host' : 'Player'}
             </span>
           </div>
+          <button
+            onClick={handleLeaveRoom}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors text-xs font-bold border border-red-800/30"
+          >
+            Leave
+          </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-8">
-        <div className="mb-8 flex justify-center">
-          <div className="bg-slate-900 rounded-2xl shadow-lg border border-slate-800 px-6 py-3 inline-flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse"></div>
-            <h3 className="font-bold text-slate-300 tracking-wide uppercase text-sm">
-              {room.phase.replace('_', ' ')}
-            </h3>
+      {/* Defensive check: Ensure player exists in the room data */}
+      {
+        !room.players?.[user.id] ? (
+          <div className="flex flex-col items-center justify-center p-20 text-center">
+            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-slate-400 mt-4 font-medium">Syncing your player data...</p>
+            <p className="text-xs text-slate-600 mt-2">If this takes too long, please try refreshing.</p>
           </div>
-        </div>
-
-        {room.phase === GamePhase.LOBBY && (
-          <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800 text-center max-w-2xl mx-auto">
-            <h3 className="text-2xl font-bold mb-4 text-slate-100">Waiting for players...</h3>
-            <div className="flex flex-wrap justify-center gap-4 mb-8">
-              {(Object.values(room.players) as Player[]).map(p => (
-                <div key={p.id} className="bg-slate-800 px-6 py-3 rounded-2xl border border-slate-700 flex items-center gap-3 max-w-[200px]">
-                  <div className="w-8 h-8 rounded-full bg-indigo-900/50 text-indigo-300 flex-shrink-0 flex items-center justify-center font-bold">
-                    {p.name[0].toUpperCase()}
-                  </div>
-                  <span className="font-medium truncate text-slate-200" title={p.name}>{p.name}</span>
-                </div>
-              ))}
+        ) : (
+          <main className="max-w-6xl mx-auto p-4 md:p-8">
+            <div className="mb-8 flex justify-center">
+              <div className="bg-slate-900 rounded-2xl shadow-lg border border-slate-800 px-6 py-3 inline-flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse"></div>
+                <h3 className="font-bold text-slate-300 tracking-wide uppercase text-sm">
+                  {room.phase.replace('_', ' ')}
+                </h3>
+              </div>
             </div>
-            {user.id === room.hostId && (
-              <button
-                onClick={() => updatePhase(GamePhase.SELECT_THEMES)}
-                className="px-10 py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg hover:scale-105 transition-transform"
-              >
-                Start Game
-              </button>
-            )}
-          </div>
-        )}
 
-        {room.phase === GamePhase.SELECT_THEMES && (
-          <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800 max-w-2xl mx-auto">
-            <h3 className="text-2xl font-bold mb-6 text-center text-slate-100">Set 3 Game Themes</h3>
-            {user.id === room.hostId ? (
-              <div className="space-y-4 max-w-md mx-auto">
-                {[0, 1, 2].map(i => (
-                  <input
-                    key={i}
-                    type="text"
-                    placeholder={`Theme ${i + 1}`}
-                    className="w-full px-5 py-4 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 focus:ring-2 focus:ring-indigo-500 placeholder-slate-500"
-                    onChange={(e) => {
-                      const newThemes = [...room.themes];
-                      newThemes[i] = e.target.value;
-                      db.updateRoom(room.id, { themes: newThemes });
-                    }}
-                  />
-                ))}
-                <button
-                  onClick={() => updatePhase(GamePhase.WRITING)}
-                  className="w-full py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg mt-4"
-                >
-                  Confirm Themes
-                </button>
-              </div>
-            ) : (
-              <div className="text-center py-10">
-                <p className="text-slate-400 italic">The host is choosing themes...</p>
-                <div className="flex justify-center gap-2 mt-4">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {(room.phase === GamePhase.WRITING || room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION || room.phase === GamePhase.FINISHED) && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-            <div className="lg:col-span-8 flex flex-col items-center">
-              {/* Stacked Themes with Tooltip Support */}
-              <div className="mb-8 flex flex-col items-center gap-2 w-full max-w-md pr-10" ref={themeContainerRef}>
-                {room.themes.map((t, i) => (
-                  <div key={i} className="relative w-full group">
-                    <button
-                      onClick={() => setActiveTooltip(activeTooltip === i ? null : i)}
-                      className="w-full bg-indigo-900/30 text-indigo-300 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold uppercase truncate border border-indigo-800/50 hover:bg-indigo-900/50 transition-colors shadow-sm cursor-help text-center"
-                    >
-                      {t || 'Theme ' + (i + 1)}
-                    </button>
-                    {activeTooltip === i && t && (
-                      <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-full max-w-[280px] p-3 bg-slate-800 text-slate-100 text-xs rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
-                        <p className="font-medium text-center break-words whitespace-normal leading-relaxed">
-                          {t}
-                        </p>
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+            {room.phase === GamePhase.LOBBY && (
+              <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800 text-center max-w-2xl mx-auto">
+                <h3 className="text-2xl font-bold mb-4 text-slate-100">Waiting for players...</h3>
+                <div className="flex flex-wrap justify-center gap-4 mb-8">
+                  {(Object.values(room.players || {}) as Player[]).map(p => (
+                    <div key={p.id} className="bg-slate-800 px-6 py-3 rounded-2xl border border-slate-700 flex items-center gap-3 max-w-[200px]">
+                      <div className="w-8 h-8 rounded-full bg-indigo-900/50 text-indigo-300 flex-shrink-0 flex items-center justify-center font-bold">
+                        {p.name?.[0]?.toUpperCase() || '?'}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <span className="font-medium truncate text-slate-200" title={p.name}>{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+                {user.id === room.hostId && (
+                  <button
+                    onClick={() => updatePhase(GamePhase.SELECT_THEMES)}
+                    className="px-10 py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg hover:scale-105 transition-transform"
+                  >
+                    Start Game
+                  </button>
+                )}
               </div>
+            )}
 
-              <div className="flex items-center gap-4 w-full max-w-md">
-                <div className="flex-1">
-                  <div className="grid grid-cols-3 gap-2 bg-slate-900 p-2 rounded-2xl shadow-2xl aspect-square w-full border border-slate-800">
-                    {room.players[user.id].grid.map((cell, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION ? cycleScore(idx) : null}
-                        className={`
+            {room.phase === GamePhase.SELECT_THEMES && (
+              <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800 max-w-2xl mx-auto">
+                <h3 className="text-2xl font-bold mb-6 text-center text-slate-100">Set 3 Game Themes</h3>
+                {user.id === room.hostId ? (
+                  <div className="space-y-4 max-w-md mx-auto">
+                    {[0, 1, 2].map(i => (
+                      <input
+                        key={i}
+                        type="text"
+                        placeholder={`Theme ${i + 1}`}
+                        className="w-full px-5 py-4 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 focus:ring-2 focus:ring-indigo-500 placeholder-slate-500"
+                        onChange={(e) => {
+                          const newThemes = [...(room.themes || [])];
+                          newThemes[i] = e.target.value;
+                          db.updateRoom(room.id, { themes: newThemes });
+                        }}
+                      />
+                    ))}
+                    <button
+                      onClick={() => updatePhase(GamePhase.WRITING)}
+                      className="w-full py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg mt-4"
+                    >
+                      Confirm Themes
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-10">
+                    <p className="text-slate-400 italic">The host is choosing themes...</p>
+                    <div className="flex justify-center gap-2 mt-4">
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(room.phase === GamePhase.WRITING || room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION || room.phase === GamePhase.FINISHED) && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+                <div className="lg:col-span-8 flex flex-col items-center">
+                  {/* Stacked Themes with Tooltip Support */}
+                  <div className="mb-8 flex flex-col items-center gap-2 w-full max-w-md pr-10" ref={themeContainerRef}>
+                    {(room.themes || []).map((t, i) => (
+                      <div key={i} className="relative w-full group">
+                        <button
+                          onClick={() => setActiveTooltip(activeTooltip === i ? null : i)}
+                          className="w-full bg-indigo-900/30 text-indigo-300 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold uppercase truncate border border-indigo-800/50 hover:bg-indigo-900/50 transition-colors shadow-sm cursor-help text-center"
+                        >
+                          {t || 'Theme ' + (i + 1)}
+                        </button>
+                        {activeTooltip === i && t && (
+                          <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-full max-w-[280px] p-3 bg-slate-800 text-slate-100 text-xs rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 border border-slate-700">
+                            <p className="font-medium text-center break-words whitespace-normal leading-relaxed">
+                              {t}
+                            </p>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-slate-800"></div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-4 w-full max-w-md">
+                    <div className="flex-1">
+                      <div className="grid grid-cols-3 gap-2 bg-slate-900 p-2 rounded-2xl shadow-2xl aspect-square w-full border border-slate-800">
+                        {room.players?.[user.id]?.grid?.map((cell, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION ? cycleScore(idx) : null}
+                            className={`
                           grid-cell flex flex-col items-center justify-center p-1 rounded-xl relative overflow-hidden cursor-pointer aspect-square
                           ${room.phase === GamePhase.WRITING ? 'bg-slate-800' : 'bg-slate-800/70'}
                           ${cell.score === 'O' ? 'border-4 border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : ''}
@@ -332,154 +364,179 @@ const App: React.FC = () => {
                           ${cell.score === 'STAR' ? 'border-4 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)] bg-amber-900/20' : ''}
                           ${cell.score === 'NONE' ? 'border border-slate-700' : ''}
                         `}
-                      >
-                        {/* THE WORD AREA (Wraps up to 24 chars) */}
-                        <div className="w-full h-full flex items-center justify-center p-1">
-                          {room.phase === GamePhase.WRITING ? (
-                            <textarea
-                              value={cell.word}
-                              placeholder="..."
-                              maxLength={24}
-                              onChange={(e) => updateGrid(idx, e.target.value)}
-                              className="w-full h-full bg-transparent text-center focus:outline-none font-bold text-slate-100 text-[10px] md:text-xs resize-none flex items-center justify-center pt-2 placeholder-slate-600"
-                              style={{ verticalAlign: 'middle' }}
-                            />
-                          ) : (
-                            <span className="font-bold text-slate-200 text-[10px] md:text-sm text-center leading-tight break-words max-w-full">
-                              {cell.word || '-'}
-                            </span>
-                          )}
-                        </div>
+                          >
+                            {/* THE WORD AREA (Wraps up to 24 chars) */}
+                            <div className="w-full h-full flex items-center justify-center p-1">
+                              {room.phase === GamePhase.WRITING ? (
+                                <textarea
+                                  value={cell.word}
+                                  placeholder="..."
+                                  maxLength={24}
+                                  onChange={(e) => updateGrid(idx, e.target.value)}
+                                  className="w-full h-full bg-transparent text-center focus:outline-none font-bold text-slate-100 text-[10px] md:text-xs resize-none flex items-center justify-center pt-2 placeholder-slate-600"
+                                  style={{ verticalAlign: 'middle' }}
+                                />
+                              ) : (
+                                <span className="font-bold text-slate-200 text-[10px] md:text-sm text-center leading-tight break-words max-w-full">
+                                  {cell.word || '-'}
+                                </span>
+                              )}
+                            </div>
 
-                        {/* SCORE ICON OVERLAY (Absolute layer, doesn't shift word) */}
-                        {room.phase !== GamePhase.WRITING && cell.score !== 'NONE' && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
-                            {cell.score === 'O' && <span className="text-green-400 text-4xl md:text-6xl font-black opacity-30 select-none">O</span>}
-                            {cell.score === 'X' && <span className="text-red-400 text-4xl md:text-6xl font-black opacity-30 select-none">X</span>}
-                            {cell.score === 'STAR' && <span className="text-amber-400 text-3xl md:text-5xl opacity-40 select-none">⭐</span>}
+                            {/* SCORE ICON OVERLAY (Absolute layer, doesn't shift word) */}
+                            {room.phase !== GamePhase.WRITING && cell.score !== 'NONE' && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
+                                {cell.score === 'O' && <span className="text-green-400 text-4xl md:text-6xl font-black opacity-30 select-none">O</span>}
+                                {cell.score === 'X' && <span className="text-red-400 text-4xl md:text-6xl font-black opacity-30 select-none">X</span>}
+                                {cell.score === 'STAR' && <span className="text-amber-400 text-3xl md:text-5xl opacity-40 select-none">⭐</span>}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="flex justify-around text-slate-600 font-bold text-sm mt-3">
-                    <span className="w-1/3 text-center">1</span>
-                    <span className="w-1/3 text-center">2</span>
-                    <span className="w-1/3 text-center">3</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col justify-between text-slate-600 font-bold text-sm h-[80%] py-4 pb-12">
-                  <div className="h-1/3 flex items-center">3</div>
-                  <div className="h-1/3 flex items-center">2</div>
-                  <div className="h-1/3 flex items-center">1</div>
-                </div>
-              </div>
-
-              <div className="mt-8 flex flex-wrap justify-center gap-4">
-                {room.phase === GamePhase.WRITING && (
-                  <button
-                    onClick={() => updatePhase(GamePhase.SCORING)}
-                    className="px-8 py-3 jinx-gradient text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
-                  >
-                    Lock Board & Start Scoring
-                  </button>
-                )}
-
-                {room.phase === GamePhase.SCORING && (
-                  <button
-                    onClick={() => updatePhase(GamePhase.VALIDATION)}
-                    className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
-                  >
-                    Reveal to Everyone (Validation)
-                  </button>
-                )}
-
-                {room.phase === GamePhase.VALIDATION && user.id === room.hostId && (
-                  <button
-                    onClick={calculateFinalScores}
-                    className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
-                  >
-                    Confirm & Finish Game
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="lg:col-span-4 space-y-6">
-              <div className="bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800">
-                <h4 className="font-bold text-slate-100 mb-4 flex items-center justify-between">
-                  <span>Players</span>
-                  <span className="bg-slate-800 text-slate-500 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">Live</span>
-                </h4>
-                <div className="space-y-4">
-                  {(Object.values(room.players) as Player[]).map(p => (
-                    <div key={p.id} className="flex items-center justify-between border-b border-slate-800 pb-3">
-                      <div className="flex items-center gap-3 max-w-[70%]">
-                        <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs ${p.id === user.id ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                          {p.name[0].toUpperCase()}
-                        </div>
-                        <span className={`text-xs font-medium truncate ${p.id === user.id ? 'text-indigo-400 font-bold' : 'text-slate-300'}`} title={p.name}>
-                          {p.name} {p.id === user.id && '(You)'}
-                        </span>
+                      <div className="flex justify-around text-slate-600 font-bold text-sm mt-3">
+                        <span className="w-1/3 text-center">1</span>
+                        <span className="w-1/3 text-center">2</span>
+                        <span className="w-1/3 text-center">3</span>
                       </div>
-                      <span className="font-mono font-bold text-sm text-indigo-400 flex-shrink-0">{p.totalScore}</span>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {(room.phase === GamePhase.VALIDATION || room.phase === GamePhase.FINISHED) && (
-                <div className="bg-indigo-950 rounded-3xl p-6 text-white shadow-2xl border border-indigo-900/50">
-                  <h4 className="font-bold mb-4 flex items-center gap-2 text-indigo-200">
-                    <span className="text-xl">🏆</span> Leaderboard
-                  </h4>
-                  <div className="space-y-3">
-                    {(Object.values(room.players) as Player[])
-                      .sort((a, b) => b.totalScore - a.totalScore)
-                      .map((p, idx) => (
-                        <div key={p.id} className="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                          <span className="text-xs font-semibold opacity-80 truncate max-w-[70%] text-indigo-100" title={p.name}>{idx + 1}. {p.name}</span>
-                          <span className="font-bold text-sm flex-shrink-0 text-indigo-300">{p.totalScore} pts</span>
+                    <div className="flex flex-col justify-between text-slate-600 font-bold text-sm h-[80%] py-4 pb-12">
+                      <div className="h-1/3 flex items-center">3</div>
+                      <div className="h-1/3 flex items-center">2</div>
+                      <div className="h-1/3 flex items-center">1</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 flex flex-col items-center gap-4">
+                    {room.phase === GamePhase.WRITING && (
+                      user.id === room.hostId ? (
+                        <button
+                          onClick={() => updatePhase(GamePhase.SCORING)}
+                          className="px-8 py-3 jinx-gradient text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                        >
+                          Lock Board & Start Scoring
+                        </button>
+                      ) : (
+                        <p className="text-slate-400 italic text-sm flex items-center gap-2">
+                          <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                          Waiting for host to lock boards...
+                        </p>
+                      )
+                    )}
+
+                    {room.phase === GamePhase.SCORING && (
+                      user.id === room.hostId ? (
+                        <button
+                          onClick={() => updatePhase(GamePhase.VALIDATION)}
+                          className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                        >
+                          Reveal to Everyone (Validation)
+                        </button>
+                      ) : (
+                        <p className="text-slate-400 italic text-sm flex items-center gap-2">
+                          <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                          Waiting for host to reveal boards...
+                        </p>
+                      )
+                    )}
+
+                    {room.phase === GamePhase.VALIDATION && (
+                      user.id === room.hostId ? (
+                        <button
+                          onClick={calculateFinalScores}
+                          className="px-8 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                        >
+                          Confirm & Finish Game
+                        </button>
+                      ) : (
+                        <p className="text-slate-400 italic text-sm flex items-center gap-2">
+                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                          Waiting for host to finalize scores...
+                        </p>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800">
+                    <h4 className="font-bold text-slate-100 mb-4 flex items-center justify-between">
+                      <span>Players</span>
+                      <span className="bg-slate-800 text-slate-500 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-tighter">Live</span>
+                    </h4>
+                    <div className="space-y-4">
+                      {(Object.values(room.players || {}) as Player[]).map(p => (
+                        <div key={p.id} className="flex items-center justify-between border-b border-slate-800 pb-3">
+                          <div className="flex items-center gap-3 max-w-[70%]">
+                            <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs ${p.id === user.id ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                              {p.name?.[0]?.toUpperCase() || '?'}
+                            </div>
+                            <span className={`text-xs font-medium truncate ${p.id === user.id ? 'text-indigo-400 font-bold' : 'text-slate-300'}`} title={p.name}>
+                              {p.name} {p.id === user.id && '(You)'}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-sm text-indigo-400 flex-shrink-0">{p.totalScore || 0}</span>
                         </div>
                       ))}
+                    </div>
                   </div>
 
-                  {user.id === room.hostId && (
-                    <button
-                      onClick={handleRestart}
-                      className="w-full mt-6 py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-400 transition-all active:scale-95 shadow-lg"
-                    >
-                      Restart Round
-                    </button>
+                  {(room.phase === GamePhase.VALIDATION || room.phase === GamePhase.FINISHED) && (
+                    <div className="bg-indigo-950 rounded-3xl p-6 text-white shadow-2xl border border-indigo-900/50">
+                      <h4 className="font-bold mb-4 flex items-center gap-2 text-indigo-200">
+                        <span className="text-xl">🏆</span> Leaderboard
+                      </h4>
+                      <div className="space-y-3">
+                        {(Object.values(room.players || {}) as Player[])
+                          .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+                          .map((p, idx) => (
+                            <div key={p.id} className="flex items-center justify-between bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+                              <span className="text-xs font-semibold opacity-80 truncate max-w-[70%] text-indigo-100" title={p.name}>{idx + 1}. {p.name}</span>
+                              <span className="font-bold text-sm flex-shrink-0 text-indigo-300">{p.totalScore || 0} pts</span>
+                            </div>
+                          ))}
+                      </div>
+
+                      {user.id === room.hostId && (
+                        <button
+                          onClick={handleRestart}
+                          className="w-full mt-6 py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-400 transition-all active:scale-95 shadow-lg"
+                        >
+                          Restart Round
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-      </main>
+              </div>
+            )}
+          </main>
+        )
+      }
 
-      {(room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION) && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-4 md:px-6 py-2 rounded-full shadow-2xl border border-slate-700 flex items-center gap-4 md:gap-6 z-20">
-          <div className="flex items-center gap-1 md:gap-2">
-            <span className="text-green-400 font-black text-lg md:text-xl">O</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase">1pt</span>
+      {
+        (room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION) && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-4 md:px-6 py-2 rounded-full shadow-2xl border border-slate-700 flex items-center gap-4 md:gap-6 z-20">
+            <div className="flex items-center gap-1 md:gap-2">
+              <span className="text-green-400 font-black text-lg md:text-xl">O</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">1pt</span>
+            </div>
+            <div className="flex items-center gap-1 md:gap-2">
+              <span className="text-red-400 font-black text-lg md:text-xl">X</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">0pt</span>
+            </div>
+            <div className="flex items-center gap-1 md:gap-2">
+              <span className="text-amber-400 text-lg md:text-xl">⭐</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">3pts</span>
+            </div>
+            <div className="w-[1px] h-4 bg-slate-700"></div>
+            <span className="text-[8px] md:text-[10px] text-slate-500 font-medium uppercase italic hidden xs:block">Tap cell to score</span>
           </div>
-          <div className="flex items-center gap-1 md:gap-2">
-            <span className="text-red-400 font-black text-lg md:text-xl">X</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase">0pt</span>
-          </div>
-          <div className="flex items-center gap-1 md:gap-2">
-            <span className="text-amber-400 text-lg md:text-xl">⭐</span>
-            <span className="text-[10px] text-slate-500 font-bold uppercase">3pts</span>
-          </div>
-          <div className="w-[1px] h-4 bg-slate-700"></div>
-          <span className="text-[8px] md:text-[10px] text-slate-500 font-medium uppercase italic hidden xs:block">Tap cell to score</span>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
