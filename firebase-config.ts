@@ -4,13 +4,14 @@ import { getDatabase } from "firebase/database";
 // TODO: Replace the following with your app's Firebase project configuration
 // See: https://firebase.google.com/docs/web/learn-more#config-object
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    databaseURL: "YOUR_DATABASE_URL",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyD1BOEbdAU17kMm0XjNT8BlQXZk2mbZOF0",
+    authDomain: "fake-jinxo-th.firebaseapp.com",
+    databaseURL: "https://fake-jinxo-th-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "fake-jinxo-th",
+    storageBucket: "fake-jinxo-th.firebasestorage.app",
+    messagingSenderId: "297395038952",
+    appId: "1:297395038952:web:b48104a4e9562e3265375d",
+    measurementId: "G-7CEE2CQ3XB"
 };
 
 // Initialize Firebase
