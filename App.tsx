@@ -83,6 +83,50 @@ const App: React.FC = () => {
     }
   }, [viewingPlayerId]);
 
+  // Host Claim Logic: If host disconnects, remaining players pick a new host
+  useEffect(() => {
+    if (!room || !user || !room.players) return;
+
+    const hostPlayer = room.players[room.hostId];
+    // If host is effectively gone (status is leaved OR they don't exist in players map)
+    const isHostGone = !hostPlayer || hostPlayer.status === 'leaved';
+
+    if (isHostGone) {
+      // Find all active players
+      const activePlayers = (Object.values(room.players) as Player[]).filter(p => p.status !== 'leaved');
+
+      if (activePlayers.length > 0) {
+        // Deterministic Leader Election:
+        // Sort players by ID. The first one is the "Temporary Leader" responsible for the update.
+        // This prevents race conditions where everyone tries to update Firebase at once.
+        activePlayers.sort((a, b) => a.id.localeCompare(b.id)); // String sort by ID
+
+        const leader = activePlayers[0];
+
+        // If I am the leader, I perform the update
+        if (user.id === leader.id) {
+          // Pick a RANDOM player from the active ones to be the new host
+          const newHostCandidate = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+          const newHostId = newHostCandidate.id;
+
+          console.log(`App: Host ${room.hostId} is gone. I am leader (${user.id}). Assigning new host: ${newHostId}`);
+
+          const updates: any = {
+            hostId: newHostId,
+            [`players/${newHostId}/isHost`]: true,
+          };
+
+          // If the old host still exists in the map, unset their flag
+          if (hostPlayer) {
+            updates[`players/${room.hostId}/isHost`] = false;
+          }
+
+          db.updateRoom(room.id, updates).catch(err => console.error("Failed to claim host", err));
+        }
+      }
+    }
+  }, [room, user]);
+
   const handleCreateRoom = async (name: string) => {
     if (name.length > 24) {
       setError("Name must be 24 characters or less");
