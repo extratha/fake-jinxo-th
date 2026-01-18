@@ -13,7 +13,9 @@ const App: React.FC = () => {
   const [room, setRoom] = useState<GameRoom | null>(null);
   const [error, setError] = useState<string>('');
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
+  const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
   const themeContainerRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Auto-join if roomId in URL or state
   useEffect(() => {
@@ -41,6 +43,19 @@ const App: React.FC = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Handle click outside for modal
+  useEffect(() => {
+    const handleModalClickOutside = (event: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        setViewingPlayerId(null);
+      }
+    };
+    if (viewingPlayerId) {
+      document.addEventListener("mousedown", handleModalClickOutside);
+      return () => document.removeEventListener("mousedown", handleModalClickOutside);
+    }
+  }, [viewingPlayerId]);
 
   const handleCreateRoom = async (name: string) => {
     if (name.length > 24) {
@@ -475,7 +490,17 @@ const App: React.FC = () => {
                             </div>
                             <span className={`text-xs font-medium truncate ${p.id === user.id ? 'text-indigo-400 font-bold' : 'text-slate-300'}`} title={p.name}>
                               {p.name} {p.id === user.id && '(You)'}
+                              {room.hostId === p.id && '(Host)'}
                             </span>
+                            {room.phase === GamePhase.VALIDATION && (
+                              <button
+                                onClick={() => setViewingPlayerId(p.id)}
+                                className="ml-2 text-slate-500 hover:text-indigo-400 transition-colors"
+                                title={`View ${p.name}'s board`}
+                              >
+                                👁️
+                              </button>
+                            )}
                           </div>
                           <span className="font-mono font-bold text-sm text-indigo-400 flex-shrink-0">{p.totalScore || 0}</span>
                         </div>
@@ -514,6 +539,59 @@ const App: React.FC = () => {
             )}
           </main>
         )
+      }
+
+      {/* Player Board Viewer Modal */}
+      {viewingPlayerId && room.players?.[viewingPlayerId] && (
+        viewingPlayerId && room.players?.[viewingPlayerId] && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div ref={modalRef} className="bg-slate-900 rounded-3xl p-6 max-w-md w-full border border-slate-700 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-slate-100">
+                  {room.players[viewingPlayerId].name}'s Board
+                </h3>
+                <button
+                  onClick={() => setViewingPlayerId(null)}
+                  className="text-slate-400 hover:text-slate-200 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 bg-slate-800 p-3 rounded-2xl">
+                {room.players[viewingPlayerId].grid?.map((cell, idx) => (
+                  <div
+                    key={idx}
+                    className={`
+                    flex flex-col items-center justify-center p-3 rounded-xl relative aspect-square
+                    ${cell.score === 'O' ? 'border-4 border-green-500 bg-slate-700' : ''}
+                    ${cell.score === 'X' ? 'border-4 border-red-500 bg-slate-700 opacity-60' : ''}
+                    ${cell.score === 'STAR' ? 'border-4 border-amber-500 bg-amber-900/20' : ''}
+                    ${cell.score === 'NONE' ? 'border border-slate-600 bg-slate-700' : ''}
+                  `}
+                  >
+                    <span className="font-bold text-slate-200 text-sm text-center leading-tight break-words max-w-full">
+                      {cell.word || '-'}
+                    </span>
+
+                    {cell.score !== 'NONE' && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/10">
+                        {cell.score === 'O' && <span className="text-green-400 text-5xl font-black opacity-30">O</span>}
+                        {cell.score === 'X' && <span className="text-red-400 text-5xl font-black opacity-30">X</span>}
+                        {cell.score === 'STAR' && <span className="text-amber-400 text-4xl opacity-40">⭐</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 text-center">
+                <span className="text-slate-400 text-sm">Total Score: </span>
+                <span className="text-indigo-400 font-bold text-lg">{room.players[viewingPlayerId].totalScore || 0}</span>
+              </div>
+            </div>
+          </div>
+        ))
       }
 
       {

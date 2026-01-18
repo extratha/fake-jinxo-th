@@ -93,15 +93,61 @@ export const dbService = {
     leaveRoom: async (roomId: string, uid: string, isHost: boolean) => {
         try {
             const roomRef = ref(database, `rooms/${roomId}`);
+            const playerRef = ref(database, `rooms/${roomId}/players/${uid}`);
+
+            // If the leaving player is the host, transfer host to another player first
             if (isHost) {
-                // Host leaves -> Delete entire room
-                await remove(roomRef);
-                console.log('Firebase: Room deleted by host', roomId);
+                return new Promise<void>((resolve, reject) => {
+                    onValue(roomRef, async (snapshot) => {
+                        const room = snapshot.val();
+                        if (!room || !room.players) {
+                            reject(new Error("Room not found"));
+                            return;
+                        }
+
+                        const remainingPlayers = Object.keys(room.players).filter(id => id !== uid);
+
+                        if (remainingPlayers.length > 0) {
+                            // Transfer host to a random remaining player
+                            const newHostId = remainingPlayers[Math.floor(Math.random() * remainingPlayers.length)];
+                            const updates: any = {
+                                hostId: newHostId,
+                                [`players/${newHostId}/isHost`]: true,
+                                [`players/${uid}`]: null // Remove the old host
+                            };
+
+                            await update(roomRef, updates);
+                            console.log('Firebase: Host transferred to', newHostId, 'and old host removed');
+                            resolve();
+                        } else {
+                            // No players left, delete the room
+                            await remove(roomRef);
+                            console.log('Firebase: Room deleted (last player left)', roomId);
+                            resolve();
+                        }
+                    }, { onlyOnce: true });
+                });
             } else {
-                // Player leaves -> Just remove them
-                const playerRef = ref(database, `rooms/${roomId}/players/${uid}`);
+                // Regular player leaving
                 await remove(playerRef);
                 console.log('Firebase: Player left room', uid);
+
+                // Check if any players remain
+                return new Promise<void>((resolve) => {
+                    onValue(roomRef, (snapshot) => {
+                        const room = snapshot.val();
+                        if (!room || !room.players || Object.keys(room.players).length === 0) {
+                            // No players left, delete the entire room
+                            remove(roomRef).then(() => {
+                                console.log('Firebase: Room deleted (no players remaining)', roomId);
+                                resolve();
+                            });
+                        } else {
+                            console.log('Firebase: Room still has players', Object.keys(room.players).length);
+                            resolve();
+                        }
+                    }, { onlyOnce: true });
+                });
             }
         } catch (error) {
             console.error('Firebase: Error leaving room', error);
