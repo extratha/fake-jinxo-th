@@ -220,7 +220,15 @@ const App: React.FC = () => {
     });
   };
 
-  const updateGrid = async (gridIndex: number, word: string) => {
+  const updateGrid = (gridIndex: number, word: string) => {
+    if (!room || !user) return;
+    const newPlayers = { ...room.players };
+    newPlayers[user.id].grid[gridIndex].word = word;
+    // Optimistic update local state only
+    setRoom({ ...room, players: newPlayers });
+  };
+
+  const saveGridToDb = async (gridIndex: number, word: string) => {
     if (!room || !user) return;
     const newPlayers = { ...room.players };
     newPlayers[user.id].grid[gridIndex].word = word;
@@ -245,10 +253,36 @@ const App: React.FC = () => {
     const newPlayers = { ...room.players };
     (Object.values(newPlayers) as Player[]).forEach(p => {
       let roundTotal = 0;
+
+      // 1. Base Score
       p.grid.forEach(cell => {
         if (cell.score === 'O') roundTotal += 1;
-        if (cell.score === 'STAR') roundTotal += 3;
+        if (cell.score === 'STAR') roundTotal += 2;
       });
+
+      // 2. Row Bonuses (Indices: 0-2, 3-5, 6-8)
+      // Row 1 (Top): +3, Row 2 (Mid): +2, Row 3 (Bot): +1
+      const rowBonuses = [3, 2, 1];
+      for (let r = 0; r < 3; r++) {
+        const start = r * 3;
+        const isBingo = [0, 1, 2].every(offset => {
+          const s = p.grid[start + offset].score;
+          return s === 'O' || s === 'STAR';
+        });
+        if (isBingo) roundTotal += rowBonuses[r];
+      }
+
+      // 3. Col Bonuses (Indices: [0,3,6], [1,4,7], [2,5,8])
+      // Col 1 (Left): +1, Col 2 (Mid): +2, Col 3 (Right): +3
+      const colBonuses = [1, 2, 3];
+      for (let c = 0; c < 3; c++) {
+        const isBingo = [0, 1, 2].every(offset => {
+          const s = p.grid[c + (offset * 3)].score;
+          return s === 'O' || s === 'STAR';
+        });
+        if (isBingo) roundTotal += colBonuses[c];
+      }
+
       p.totalScore += roundTotal;
     });
     await db.updateRoom(room.id, { players: newPlayers, phase: GamePhase.FINISHED });
@@ -466,6 +500,7 @@ const App: React.FC = () => {
                                   placeholder="..."
                                   maxLength={24}
                                   onChange={(e) => updateGrid(idx, e.target.value)}
+                                  onBlur={(e) => saveGridToDb(idx, e.target.value)}
                                   className="w-full h-full bg-transparent text-center focus:outline-none font-bold text-slate-100 text-[10px] md:text-xs resize-none flex items-center justify-center pt-2 placeholder-slate-600"
                                   style={{ verticalAlign: 'middle' }}
                                 />

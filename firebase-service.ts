@@ -36,7 +36,7 @@ export const dbService = {
         const roomRef = ref(database, `rooms/${roomId}`);
         const unsubscribe = onValue(roomRef, (snapshot) => {
             const data = snapshot.val();
-            console.log('Firebase: Received room data', roomId, data);
+            console.log('Firebase: Received room data', roomId);
             if (data) {
                 callback(data);
             }
