@@ -9,10 +9,8 @@ export const dbService = {
             const roomRef = ref(database, `rooms/${room.id}`);
             await set(roomRef, room);
 
-            // Auto-delete room if host disconnects
-            onDisconnect(roomRef).remove().catch(err =>
-                console.error('Firebase: Failed to set onDisconnect for room', room.id, err)
-            );
+            // Auto-delete room if host disconnects - REMOVED to persist room
+            // onDisconnect(roomRef).remove().catch(err => ...);
 
             console.log('Firebase: Room saved successfully', room.id);
         } catch (error) {
@@ -60,27 +58,47 @@ export const dbService = {
                     reject(new Error("Room not found"));
                     return;
                 }
-                const updatedPlayers = {
-                    ...room.players,
-                    [uid]: {
-                        id: uid,
-                        name,
-                        isHost: false,
-                        grid: Array(9).fill(null).map(() => ({ word: '', score: 'NONE' })),
-                        totalScore: 0,
-                        isReady: false
-                    }
-                };
+
+                const existingPlayer = room.players?.[uid];
+                let updatedPlayers;
+
+                if (existingPlayer) {
+                    console.log('Firebase: Rejoining existing player', uid);
+                    // Preserve existing state, just update status and maybe name
+                    updatedPlayers = {
+                        ...room.players,
+                        [uid]: {
+                            ...existingPlayer,
+                            name: name, // User might have updated name, but identity is same
+                            status: 'active'
+                        }
+                    };
+                } else {
+                    console.log('Firebase: Joining as new player', uid);
+                    updatedPlayers = {
+                        ...room.players,
+                        [uid]: {
+                            id: uid,
+                            name,
+                            isHost: false, // Default false, unless logic elsewhere handles it? (Usually host is set on creation)
+                            grid: Array(9).fill(null).map(() => ({ word: '', score: 'NONE' })),
+                            totalScore: 0,
+                            isReady: false,
+                            status: 'active'
+                        }
+                    };
+                }
+
                 try {
                     await update(roomRef, { players: updatedPlayers });
 
                     // Auto-remove player if they disconnect
                     const playerRef = ref(database, `rooms/${roomId}/players/${uid}`);
-                    onDisconnect(playerRef).remove().catch(err =>
+                    onDisconnect(playerRef).update({ status: 'leaved' }).catch(err =>
                         console.error('Firebase: Failed to set onDisconnect for player', uid, err)
                     );
 
-                    console.log('Firebase: Joined room successfully', roomId);
+                    console.log('Firebase: Joined/Rejoined room successfully', roomId);
                     resolve();
                 } catch (error) {
                     console.error('Firebase: Error updating players during join', roomId, error);
@@ -95,63 +113,80 @@ export const dbService = {
             const roomRef = ref(database, `rooms/${roomId}`);
             const playerRef = ref(database, `rooms/${roomId}/players/${uid}`);
 
-            // If the leaving player is the host, transfer host to another player first
+            // Mark the leaving player as leaved instead of removing
+            await update(playerRef, { status: 'leaved' });
+            console.log('Firebase: Player marked as leaved', uid);
+
+            // Fetch the latest room data
+            const snapshot = await new Promise<any>((resolve, reject) => {
+                onValue(roomRef, (snap) => resolve(snap), { onlyOnce: true });
+            });
+            const room = snapshot.val();
+            if (!room) {
+                console.warn('Firebase: Room not found after leaving', roomId);
+                return;
+            }
+
             if (isHost) {
-                return new Promise<void>((resolve, reject) => {
-                    onValue(roomRef, async (snapshot) => {
-                        const room = snapshot.val();
-                        if (!room || !room.players) {
-                            reject(new Error("Room not found"));
-                            return;
-                        }
+                // Transfer host to another active player (status not leaved)
+                const remainingActive = Object.entries(room.players || {})
+                    .filter(([id, p]) => id !== uid && (p as any).status !== 'leaved')
+                    .map(([id]) => id);
 
-                        const remainingPlayers = Object.keys(room.players).filter(id => id !== uid);
+                if (remainingActive.length > 0) {
+                    const newHostId = remainingActive[Math.floor(Math.random() * remainingActive.length)];
+                    const updates: any = {
+                        hostId: newHostId,
+                        [`players/${newHostId}/isHost`]: true,
+                        [`players/${uid}/isHost`]: false,
+                    };
+                    await update(roomRef, updates);
+                    console.log('Firebase: Host transferred to', newHostId);
+                } else {
+                    // Check if there are ANY players at all (even disconnected ones) before deleting?
+                    // Actually, if no *active* players and host leaves, maybe we DO want to keep the room alive 
+                    // for a bit in case they rejoin? 
+                    // BUT for now, let's stick to: "If everyone is gone/leaved, delete."
 
-                        if (remainingPlayers.length > 0) {
-                            // Transfer host to a random remaining player
-                            const newHostId = remainingPlayers[Math.floor(Math.random() * remainingPlayers.length)];
+                    const allLeaved = Object.values(room.players || {}).every(
+                        (p: any) => p.id === uid || p.status === 'leaved'
+                    );
+
+                    if (allLeaved) {
+                        // No active players left, delete the room
+                        await remove(roomRef);
+                        console.log('Firebase: Room deleted (no active players)', roomId);
+                    } else {
+                        // There are players but they are all "leaved" status (disconnected).
+                        // Just give host to one of them randomly so the room has a host?
+                        // Or just leave hostId pointing to the leaving user? 
+                        // Let's pick a random leaved player to be host so at least someone is host if they rejoin.
+                        const remainingLeaved = Object.keys(room.players || {}).filter(id => id !== uid);
+                        if (remainingLeaved.length > 0) {
+                            const newHostId = remainingLeaved[Math.floor(Math.random() * remainingLeaved.length)];
                             const updates: any = {
                                 hostId: newHostId,
                                 [`players/${newHostId}/isHost`]: true,
-                                [`players/${uid}`]: null // Remove the old host
+                                [`players/${uid}/isHost`]: false,
                             };
-
                             await update(roomRef, updates);
-                            console.log('Firebase: Host transferred to', newHostId, 'and old host removed');
-                            resolve();
-                        } else {
-                            // No players left, delete the room
-                            await remove(roomRef);
-                            console.log('Firebase: Room deleted (last player left)', roomId);
-                            resolve();
+                            console.log('Firebase: Host transferred to disconnected player', newHostId);
                         }
-                    }, { onlyOnce: true });
-                });
+                    }
+                }
             } else {
-                // Regular player leaving
-                await remove(playerRef);
-                console.log('Firebase: Player left room', uid);
-
-                // Check if any players remain
-                return new Promise<void>((resolve) => {
-                    onValue(roomRef, (snapshot) => {
-                        const room = snapshot.val();
-                        if (!room || !room.players || Object.keys(room.players).length === 0) {
-                            // No players left, delete the entire room
-                            remove(roomRef).then(() => {
-                                console.log('Firebase: Room deleted (no players remaining)', roomId);
-                                resolve();
-                            });
-                        } else {
-                            console.log('Firebase: Room still has players', Object.keys(room.players).length);
-                            resolve();
-                        }
-                    }, { onlyOnce: true });
-                });
+                // For regular player, check if all players are leaved
+                const allLeaved = Object.values(room.players || {}).every(
+                    (p: any) => p.status === 'leaved'
+                );
+                if (allLeaved) {
+                    await remove(roomRef);
+                    console.log('Firebase: Room deleted (all players leaved)', roomId);
+                }
             }
         } catch (error) {
             console.error('Firebase: Error leaving room', error);
             throw error;
         }
-    }
+    },
 };

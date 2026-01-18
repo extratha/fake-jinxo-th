@@ -22,6 +22,7 @@ export interface Player {
   grid: GridCell[]; // 9 cells
   totalScore: number;
   isReady: boolean;
+  status?: 'active' | 'leaved';
 }
 
 export interface GameRoom {

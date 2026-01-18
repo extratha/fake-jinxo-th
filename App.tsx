@@ -14,8 +14,34 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState('');
+  const [joinRidInput, setJoinRidInput] = useState('');
+
   const themeContainerRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Load user from local storage on mount
+  useEffect(() => {
+    const storedUserId = localStorage.getItem('jinx_userId');
+    const storedUserName = localStorage.getItem('jinx_userName');
+
+    if (storedUserId) {
+      if (storedUserName) {
+        // If we have both, we can restore the session or prefill
+        setNameInput(storedUserName);
+        setUser({ id: storedUserId, name: storedUserName });
+      } else {
+        // Just ID exists? that's weird but valid
+        setUser({ id: storedUserId, name: '' });
+      }
+    }
+  }, []);
+
+  // Update localStorage when user changes (or new one created)
+  const saveUserToStorage = (id: string, name: string) => {
+    localStorage.setItem('jinx_userId', id);
+    localStorage.setItem('jinx_userName', name);
+  };
 
   // Auto-join if roomId in URL or state
   useEffect(() => {
@@ -62,7 +88,11 @@ const App: React.FC = () => {
       setError("Name must be 24 characters or less");
       return;
     }
-    const uid = Math.random().toString(36).substr(2, 9);
+
+    // Use existing ID or generate new one
+    const uid = user?.id || Math.random().toString(36).substr(2, 9);
+    saveUserToStorage(uid, name);
+
     const rid = Math.floor(1000 + Math.random() * 9000).toString();
     const newUser = { id: uid, name };
 
@@ -78,7 +108,8 @@ const App: React.FC = () => {
           isHost: true,
           grid: createEmptyGrid(),
           totalScore: 0,
-          isReady: false
+          isReady: false,
+          status: 'active'
         }
       },
       createdAt: Date.now()
@@ -94,7 +125,10 @@ const App: React.FC = () => {
       setError("Name must be 24 characters or less");
       return;
     }
-    const uid = Math.random().toString(36).substr(2, 9);
+
+    // Use existing ID or generate new one
+    const uid = user?.id || Math.random().toString(36).substr(2, 9);
+    saveUserToStorage(uid, name);
 
     try {
       await db.joinRoom(targetRid, uid, name);
@@ -193,14 +227,14 @@ const App: React.FC = () => {
               placeholder="Your Name (Max 24)"
               maxLength={24}
               className="w-full px-5 py-3 rounded-2xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-800 text-slate-100 placeholder-slate-500"
-              id="playerName"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
             />
             <div className="h-[1px] bg-slate-800 my-4"></div>
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => {
-                  const name = (document.getElementById('playerName') as HTMLInputElement).value;
-                  if (name) handleCreateRoom(name);
+                  if (nameInput) handleCreateRoom(nameInput);
                 }}
                 className="w-full py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg hover:opacity-90 transition-all active:scale-95"
               >
@@ -215,13 +249,12 @@ const App: React.FC = () => {
                 type="text"
                 placeholder="Enter 4-digit Room Code"
                 className="w-full px-5 py-3 rounded-2xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-800 text-slate-100 text-center text-xl tracking-widest font-mono placeholder-slate-500"
-                id="joinRid"
+                value={joinRidInput}
+                onChange={(e) => setJoinRidInput(e.target.value)}
               />
               <button
                 onClick={() => {
-                  const name = (document.getElementById('playerName') as HTMLInputElement).value;
-                  const rid = (document.getElementById('joinRid') as HTMLInputElement).value;
-                  if (name && rid) handleJoinRoom(name, rid);
+                  if (nameInput && joinRidInput) handleJoinRoom(nameInput, joinRidInput);
                 }}
                 className="w-full py-4 bg-slate-800 border-2 border-indigo-500 text-indigo-400 font-bold rounded-2xl hover:bg-slate-700 transition-all active:scale-95"
               >
@@ -232,6 +265,7 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+
   }
 
   return (
