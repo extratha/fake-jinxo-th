@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
   const [viewingPlayerId, setViewingPlayerId] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [joinRidInput, setJoinRidInput] = useState('');
 
@@ -361,6 +362,12 @@ const App: React.FC = () => {
             </span>
           </div>
           <button
+            onClick={() => setShowRules(true)}
+            className="xs:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-900/30 text-indigo-300 hover:bg-indigo-900/50 transition-colors text-xs font-bold border border-indigo-800/30 mr-2"
+          >
+            Rules
+          </button>
+          <button
             onClick={handleLeaveRoom}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors text-xs font-bold border border-red-800/30"
           >
@@ -707,6 +714,67 @@ const App: React.FC = () => {
         ))
       }
 
+      {/* Rules Modal */}
+      {showRules && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div
+            className="bg-slate-900 rounded-3xl p-6 max-w-lg w-full border border-slate-700 shadow-2xl relative max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+          >
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              <h3 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                📜 Game Rules
+              </h3>
+              <button
+                onClick={() => setShowRules(false)}
+                className="text-slate-400 hover:text-slate-200 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="overflow-y-auto pr-2 text-slate-300 text-sm space-y-4 leading-relaxed custom-scrollbar">
+              <section>
+                <h4 className="font-bold text-indigo-400 mb-1">Gameplay Basics</h4>
+                <ul className="list-disc list-inside space-y-1 pl-1">
+                  <li><strong className="text-slate-200">Setup:</strong> Each player gets a JinxO board (a grid) and a marker.</li>
+                  <li><strong className="text-slate-200">Prompts:</strong> A topic card is drawn (e.g., "Things you find in a kitchen").</li>
+                  <li><strong className="text-slate-200">Answering:</strong> For each topic, every player must write 3 different words or short phrases related to that topic. Since the JinxO board has 3 topics and 3 boxes for each, this means each player will write a total of 9 answers per round (3 words × 3 topics). Fill one answer in each empty box on your grid.</li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="font-bold text-indigo-400 mb-1">Scoring (Round End)</h4>
+                <ul className="space-y-2">
+                  <li className="flex gap-2">
+                    <span className="text-red-400 font-bold min-w-[60px]">No Match:</span>
+                    <div>If your answer matches no one else, you get <strong className="text-white">0 points</strong> (fill<span className="text-red-400 font-bold"> X</span> ).</div>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-green-400 font-bold min-w-[60px]">Match:</span>
+                    <span>If you match one or more people, you score <strong className="text-white">1 point</strong> (fill<span className="text-green-400 font-bold"> O</span> ).</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-amber-400 font-bold min-w-[60px]">JinxO!:</span>
+                    <span>If you match <strong>exactly one other person</strong>, you both shout "JinxO!", and that box is worth <strong className="text-white">2 points</strong> (fill the star ⭐).</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="font-bold text-indigo-400 mb-1">Bonuses </h4>
+                <p> If you have complete rows or columns circled, you score points too. The scores are written along the edges of the grid. The box at the top right helps score both the 3 point column and the 3 point row,</p>
+              </section>
+            </div>
+
+            {/* Backdrop click handler handled by parent, but let's make this div closeable by clicking backdrop outside */}
+          </div>
+
+          {/* Invisible backdrop interactive layer to close */}
+          <div className="absolute inset-0 -z-10" onClick={() => setShowRules(false)} />
+        </div>
+      )}
+
       {
         (room.phase === GamePhase.SCORING || room.phase === GamePhase.VALIDATION) && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-4 md:px-6 py-2 rounded-full shadow-2xl border border-slate-700 flex items-center gap-4 md:gap-6 z-20">
@@ -720,7 +788,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center gap-1 md:gap-2">
               <span className="text-amber-400 text-lg md:text-xl">⭐</span>
-              <span className="text-[10px] text-slate-500 font-bold uppercase">3pts</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase">2pts</span>
             </div>
             <div className="w-[1px] h-4 bg-slate-700"></div>
             <span className="text-[8px] md:text-[10px] text-slate-500 font-medium uppercase italic hidden xs:block">Tap cell to score</span>
