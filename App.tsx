@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const [nameInput, setNameInput] = useState('');
   const [joinRidInput, setJoinRidInput] = useState('');
 
-  const themeContainerRef = useRef<HTMLDivElement>(null);
+  const topicContainerRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Load user from local storage on mount
@@ -62,7 +62,7 @@ const App: React.FC = () => {
   // Handle click outside for tooltips
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (themeContainerRef.current && !themeContainerRef.current.contains(event.target as Node)) {
+      if (topicContainerRef.current && !topicContainerRef.current.contains(event.target as Node)) {
         setActiveTooltip(null);
       }
     };
@@ -143,7 +143,7 @@ const App: React.FC = () => {
     const newRoom: GameRoom = {
       id: rid,
       hostId: uid,
-      themes: ['', '', ''],
+      topics: ['', '', ''],
       phase: GamePhase.LOBBY,
       players: {
         [uid]: {
@@ -214,8 +214,8 @@ const App: React.FC = () => {
     });
 
     await db.updateRoom(room.id, {
-      phase: GamePhase.SELECT_THEMES,
-      themes: ['', '', ''],
+      phase: GamePhase.SELECT_TOPICS,
+      topics: ['', '', ''],
       players: resetPlayers
     });
   };
@@ -403,7 +403,7 @@ const App: React.FC = () => {
                 </div>
                 {user.id === room.hostId && (
                   <button
-                    onClick={() => updatePhase(GamePhase.SELECT_THEMES)}
+                    onClick={() => updatePhase(GamePhase.SELECT_TOPICS)}
                     className="px-10 py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg hover:scale-105 transition-transform"
                   >
                     Start Game
@@ -412,21 +412,21 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {room.phase === GamePhase.SELECT_THEMES && (
+            {room.phase === GamePhase.SELECT_TOPICS && (
               <div className="bg-slate-900 rounded-3xl p-8 shadow-2xl border border-slate-800 max-w-2xl mx-auto">
-                <h3 className="text-2xl font-bold mb-6 text-center text-slate-100">Set 3 Game Themes</h3>
+                <h3 className="text-2xl font-bold mb-6 text-center text-slate-100">Set 3 Game Topics</h3>
                 {user.id === room.hostId ? (
                   <div className="space-y-4 max-w-md mx-auto">
                     {[0, 1, 2].map(i => (
                       <input
                         key={i}
                         type="text"
-                        placeholder={`Theme ${i + 1}`}
+                        placeholder={`Topic ${i + 1}`}
                         className="w-full px-5 py-4 rounded-xl border border-slate-700 bg-slate-800 text-slate-100 focus:ring-2 focus:ring-indigo-500 placeholder-slate-500"
                         onChange={(e) => {
-                          const newThemes = [...(room.themes || [])];
-                          newThemes[i] = e.target.value;
-                          db.updateRoom(room.id, { themes: newThemes });
+                          const newTopics = [...(room.topics || [])];
+                          newTopics[i] = e.target.value;
+                          db.updateRoom(room.id, { topics: newTopics });
                         }}
                       />
                     ))}
@@ -434,12 +434,12 @@ const App: React.FC = () => {
                       onClick={() => updatePhase(GamePhase.WRITING)}
                       className="w-full py-4 jinx-gradient text-white font-bold rounded-2xl shadow-lg mt-4"
                     >
-                      Confirm Themes
+                      Confirm Topics
                     </button>
                   </div>
                 ) : (
                   <div className="text-center py-10">
-                    <p className="text-slate-400 italic">The host is choosing themes...</p>
+                    <p className="text-slate-400 italic">The host is choosing topics...</p>
                     <div className="flex justify-center gap-2 mt-4">
                       <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"></div>
                       <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -454,15 +454,15 @@ const App: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
                 <div className="lg:col-span-8 flex flex-col items-center">
-                  {/* Stacked Themes with Tooltip Support */}
-                  <div className="mb-8 flex flex-col items-center gap-2 w-full max-w-md pr-10" ref={themeContainerRef}>
-                    {(room.themes || []).map((t, i) => (
+                  {/* Stacked Topics with Tooltip Support */}
+                  <div className="mb-8 flex flex-col items-center gap-2 w-full max-w-md pr-10" ref={topicContainerRef}>
+                    {(room.topics || []).map((t, i) => (
                       <div key={i} className="relative w-full group">
                         <button
                           onClick={() => setActiveTooltip(activeTooltip === i ? null : i)}
                           className="w-full bg-indigo-900/30 text-indigo-300 px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold uppercase truncate border border-indigo-800/50 hover:bg-indigo-900/50 transition-colors shadow-sm cursor-help text-center"
                         >
-                          {t || 'Theme ' + (i + 1)}
+                          {t || 'Topic ' + (i + 1)}
                         </button>
                         {activeTooltip === i && t && (
                           <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-full max-w-[280px] p-3 bg-slate-800 text-slate-100 text-xs rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-2 border border-slate-700">

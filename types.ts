@@ -1,7 +1,6 @@
-
 export enum GamePhase {
   LOBBY = 'LOBBY',
-  SELECT_THEMES = 'SELECT_THEMES',
+  SELECT_TOPICS = 'SELECT_TOPICS',
   WRITING = 'WRITING',
   SCORING = 'SCORING',
   VALIDATION = 'VALIDATION',
@@ -28,7 +27,7 @@ export interface Player {
 export interface GameRoom {
   id: string;
   hostId: string;
-  themes: string[];
+  topics: string[];
   phase: GamePhase;
   players: Record<string, Player>;
   createdAt: number;
